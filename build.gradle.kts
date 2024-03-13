@@ -1,5 +1,6 @@
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
+import java.net.URL
 
 fun properties(key: String) = providers.gradleProperty(key)
 fun environment(key: String) = providers.environmentVariable(key)
@@ -116,4 +117,28 @@ tasks {
         // https://plugins.jetbrains.com/docs/intellij/deployment.html#specifying-a-release-channel
         channels = properties("pluginVersion").map { listOf(it.substringAfter('-', "").substringBefore('.').ifEmpty { "default" }) }
     }
+}
+
+
+val mockJdkRoot = layout.buildDirectory.asFile.get().resolve("mockJDK")
+
+// Setup fake JDK for maven dependencies to work
+// See https://jetbrains-platform.slack.com/archives/CPL5291JP/p1664105522154139 and https://youtrack.jetbrains.com/issue/IJSDK-321
+tasks.register("downloadMockJdk") {
+    val mockJdkRoot = mockJdkRoot
+    doLast {
+        val rtJar = mockJdkRoot.resolve("java/mockJDK-1.7/jre/lib/rt.jar")
+        if (!rtJar.exists()) {
+            rtJar.parentFile.mkdirs()
+            rtJar.writeBytes(URL("https://github.com/JetBrains/intellij-community/raw/master/java/mockJDK-1.7/jre/lib/rt.jar").openStream().readBytes())
+        }
+    }
+}
+
+tasks.test.configure {
+    dependsOn("downloadMockJdk")
+    // Setup fake JDK for maven dependencies to work
+    // See https://jetbrains-platform.slack.com/archives/CPL5291JP/p1664105522154139 and https://youtrack.jetbrains.com/issue/IJSDK-321
+    // Use a relative path to make build caching work
+    systemProperty("idea.home.path", mockJdkRoot.relativeTo(project.projectDir).path)
 }
